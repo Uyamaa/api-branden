@@ -36,7 +36,7 @@ def health_check():
     except Exception as e:
         return {"status": "unhealthy", "database_error": str(e)}
 
-#  GET /api/drives LAHD
+#  GET /api/drives 
 @app.get("/api/drives")
 def get_all_drives(centre_id: Optional[int] = None, status: Optional[str] = None):
     try:
@@ -74,7 +74,7 @@ def get_drive_details(serial_number: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-#  POST /api/drives 
+# 3. POST /api/drives 
 @app.post("/api/drives", status_code=201)
 def register_drive(drive: DriveCreate):
     try:
@@ -94,3 +94,48 @@ def register_drive(drive: DriveCreate):
         return {"message": "Drive registered successfully", "drive": new_drive}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+#  GET /api/drives/{serial_number}/history @app.get("/api/drives/{serial_number}/history")
+def get_drive_history(serial_number: str, limit: int = 20):
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM smart_reading 
+                WHERE serial_number = %s 
+                ORDER BY timestamp DESC 
+                LIMIT %s;
+                """,
+                (serial_number, limit)
+            )
+            readings = cur.fetchall()
+        conn.close()
+        return {"serial_number": serial_number, "count": len(readings), "history": readings}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+#  DELETE /api/drives/{serial_number} @app.delete("/api/drives/{serial_number}")
+def decommission_drive(serial_number: str):
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE hard_drive 
+                SET status = 'DECOMMISSIONED' 
+                WHERE serial_number = %s 
+                RETURNING *;
+                """,
+                (serial_number,)
+            )
+            updated = cur.fetchone()
+            conn.commit()
+        conn.close()
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Drive {serial_number} not found")
+        return {"message": f"Drive {serial_number} successfully decommissioned", "drive": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
