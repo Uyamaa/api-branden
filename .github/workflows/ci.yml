@@ -54,7 +54,7 @@ jobs:
           docker rm api-branden-container || true
           docker run -d \
             --name api-branden-container \
-            -p 8001:8000 \
+            -p 8002:8000 \
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             --restart always \
             api-branden:latest
