@@ -1,8 +1,8 @@
-name: Build and Test CI
+name: Build, Test & Deploy to Oracle VM
 
 on:
   push:
-    branches: [ main, feature/** ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -26,4 +26,35 @@ jobs:
 
     - name: Run Test Suite
       run: |
-        pytest
+        python -m pytest
+
+  deploy:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Deploy to Oracle Cloud Ubuntu VM
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VM_HOST }}
+        username: ${{ secrets.VM_USER }}
+        key: ${{ secrets.VM_SSH_KEY }}
+        script: |
+          if [ -d "api-branden" ]; then
+            cd api-branden
+            git pull origin main
+          else
+            git clone https://github.com/Uyamaa/api-branden.git
+            cd api-branden
+          fi
+
+          docker build -t api-branden:latest .
+          docker stop api-branden-container || true
+          docker rm api-branden-container || true
+          docker run -d \
+            --name api-branden-container \
+            -p 8001:8000 \
+            -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --restart always \
+            api-branden:latest
