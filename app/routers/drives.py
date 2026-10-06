@@ -19,7 +19,7 @@ def _counter(label, n):
 
 
 def smart_readings(r: models.SmartReading | None):
-    """Turn the latest smartReading row into the nine tiles the drive page shows."""
+    """Turn the latest smart_reading row into the nine tiles the drive page shows."""
     if r is None:
         return []
     temp = r.temperature or 0
@@ -27,8 +27,8 @@ def smart_readings(r: models.SmartReading | None):
         {"label": "Temperature", "value": f"{temp:g}°C", "level": "warning" if temp >= 45 else "ok",
          "note": "High temperature" if temp >= 45 else "Within range"},
         {"label": "Power-on hours", "value": f"{(r.power_on_hours or 0):,} h", "level": "ok", "note": "Lifetime counter"},
-        _counter("Reallocated sectors", r.reallocatedSectors),
-        _counter("Spin retry count", r.spinRetryCount),
+        _counter("Reallocated sectors", r.reallocated_sectors),
+        _counter("Spin retry count", r.spin_retry_count),
         _counter("End-to-end error", r.end_to_end_error),
         _counter("Reported uncorrectable", r.reported_uncorrectable),
         _counter("Command timeout", r.command_timeout),
@@ -108,7 +108,7 @@ def drive_detail(serial: str, db: Session = Depends(get_db)):
         .all()
     )
     maint = (
-        db.query(models.Maintenance, models.User.full_Name)
+        db.query(models.Maintenance, models.User.full_name)
         .outerjoin(models.User, models.User.user_id == models.Maintenance.performed_by)
         .filter(models.Maintenance.drive_id == drive.drive_id)
         .order_by(models.Maintenance.maintenance_date.desc(), models.Maintenance.maintenance_id.desc())
@@ -134,7 +134,7 @@ def drive_detail(serial: str, db: Session = Depends(get_db)):
         "info": {"model": drive.model, "capacityTb": drive.capacity, "dc": dc,
                  "rack": "n/a", "asset": f"DRV-{drive.drive_id}"},
         "prediction": prediction,
-        # smartReading has no timestamp column; the time shown is when it was read from the database.
+        # smart_reading has no timestamp column; the time shown is when it was read from the database.
         "smart": {"capturedAt": now_utc().strftime("%Y-%m-%dT%H:%M:%SZ"), "readings": smart_readings(reading)},
         "alerts": [
             {"id": a.alert_id, "ts": iso(a.alert_date), "type": a.alert_type, "severity": a.severity.lower(),
