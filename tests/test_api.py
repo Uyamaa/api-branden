@@ -103,3 +103,19 @@ def test_reports(client):
     oct_ = client.get("/api/reports/summary?month=2026-10&scope=Frankfurt DC-02").json()
     assert oct_["replacementsByDc"] == [{"dc": "Frankfurt DC-02", "count": 1}]
     assert client.get("/api/reports/summary?month=2026-13").status_code == 422
+
+def test_data_entry(client):
+    dcs = client.get("/api/data-centres").json()["items"]
+    assert dcs
+    name = dcs[0]["name"]
+    r = client.post("/api/drives", json={"serial": "NEW-001", "model": "Test", "capacityTb": 4, "dc": name, "status": "Healthy"})
+    assert r.status_code == 201
+    assert client.post("/api/drives", json={"serial": "NEW-001", "model": "Test", "capacityTb": 4, "dc": name}).status_code == 409
+    assert client.post("/api/drives", json={"serial": "NEW-002", "model": "T", "capacityTb": 4, "dc": "nope"}).status_code == 404
+    r = client.post("/api/drives/NEW-001/readings", json={"temperature": 51, "powerOnHours": 1000, "reallocatedSectors": 3})
+    assert r.status_code == 201
+    detail = client.get("/api/drives/NEW-001").json()
+    assert detail["smart"]["readings"][0]["value"] == "51°C"
+    assert client.post("/api/drives/NOPE/readings", json={"temperature": 1, "powerOnHours": 1}).status_code == 404
+    assert client.post("/api/data-centres", json={"name": name, "location": "x"}).status_code == 409
+    assert client.post("/api/data-centres", json={"name": "Cape Town DC-09", "location": "Cape Town"}).status_code == 201
