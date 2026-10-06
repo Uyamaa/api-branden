@@ -2,11 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models  # noqa: F401  (registers the tables)
-from .database import Base, engine
 from .routers import alerts, dashboard, drives, maintenance, replacements, reports, users
 
-# Creates any missing tables. Existing tables from the other services are left untouched.
-Base.metadata.create_all(bind=engine)
+# The service never creates tables: the schema belongs to the shared database.
 
 app = FastAPI(title="Uyamaa Fleet API", description="Dashboard, drives, alerts, maintenance, replacements, users and reports.")
 
