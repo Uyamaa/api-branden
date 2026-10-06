@@ -18,9 +18,9 @@ def _record(m: models.Maintenance, serial: str, by: str | None):
 def list_maintenance(scope: str = "all", type: str = "all", db: Session = Depends(get_db)):
     """Maintenance history, newest first. Insert point 5."""
     query = (
-        db.query(models.Maintenance, models.HardDrive.serial_number, models.User.full_Name)
+        db.query(models.Maintenance, models.HardDrive.serial_number, models.User.full_name)
         .join(models.HardDrive, models.HardDrive.drive_id == models.Maintenance.drive_id)
-        .join(models.DataCenter, models.DataCenter.data_center_id == models.Maintenance.dataCenterID)
+        .join(models.DataCenter, models.DataCenter.data_center_id == models.Maintenance.data_center_id)
         .outerjoin(models.User, models.User.user_id == models.Maintenance.performed_by)
     )
     if scope != "all":
@@ -47,10 +47,10 @@ def create_maintenance(body: MaintenanceIn, request: Request, db: Session = Depe
 
     user = acting_user(db, request)
     record = models.Maintenance(
-        drive_id=drive.drive_id, dataCenterID=dc_id, maintenance_date=body.date,
+        drive_id=drive.drive_id, data_center_id=dc_id, maintenance_date=body.date,
         maintenance_type=body.type.strip(), performed_by=user.user_id,
     )
     db.add(record)
     db.commit()
     db.refresh(record)
-    return _record(record, drive.serial_number, user.full_Name)
+    return _record(record, drive.serial_number, user.full_name)
