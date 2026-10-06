@@ -24,7 +24,7 @@ def list_replacements(scope: str = "all", month: str = Query("2026-10"), db: Ses
     """The replacement register for one month. Insert point 7."""
     start, end = _month(month)
     query = (
-        db.query(models.Replacement, models.HardDrive.serial_number, NewDrive.serial_number, models.User.full_Name,
+        db.query(models.Replacement, models.HardDrive.serial_number, NewDrive.serial_number, models.User.full_name,
                  models.DataCenter.name)
         .join(models.HardDrive, models.HardDrive.drive_id == models.Replacement.drive_id)
         .join(models.DataCenter, models.DataCenter.data_center_id == models.Replacement.data_center_id)
@@ -65,4 +65,4 @@ def create_replacement(body: ReplacementIn, request: Request, db: Session = Depe
     db.refresh(record)
     dc = db.get(models.DataCenter, old.data_center_id)
     return {"id": record.replacement_id, "date": record.replacement_date.isoformat(), "oldSerial": old.serial_number,
-            "newSerial": new.serial_number, "reason": record.reason, "by": user.full_Name, "dc": dc.name if dc else ""}
+            "newSerial": new.serial_number, "reason": record.reason, "by": user.full_name, "dc": dc.name if dc else ""}
