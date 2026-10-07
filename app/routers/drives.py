@@ -68,7 +68,7 @@ def list_drives(
         .all()
     )
     items = [
-        {"serial": d.serial_number, "model": d.model, "capacityTb": d.capacity,
+        {"id": d.drive_id, "serial": d.serial_number, "model": d.model, "capacityTb": d.capacity,
          "status": drive_status(d.status), "dc": dc}
         for d, dc in rows
     ]
