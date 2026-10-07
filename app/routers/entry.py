@@ -66,6 +66,7 @@ def create_reading(serial: str, body: ReadingIn, db: Session = Depends(get_db)):
     db.refresh(reading)
     return {"id": reading.reading_id, "serial": serial}
 
+
 def _find_drive(db: Session, serial: str) -> models.HardDrive:
     drive = db.query(models.HardDrive).filter(models.HardDrive.serial_number == serial).first()
     if drive is None:
@@ -102,6 +103,7 @@ def delete_drive(serial: str, db: Session = Depends(get_db)):
     did = drive.drive_id
     pred_ids = [p for (p,) in db.query(models.Prediction.prediction_id).filter(models.Prediction.drive_id == did)]
 
+    db.query(models.AlertMessage).filter(models.AlertMessage.drive_id == did).delete(synchronize_session=False)
     db.query(models.Alert).filter(models.Alert.drive_id == did).delete(synchronize_session=False)
     db.query(models.SmartReading).filter(models.SmartReading.drive_id == did).delete(synchronize_session=False)
     db.query(models.Maintenance).filter(models.Maintenance.drive_id == did).delete(synchronize_session=False)
