@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from .. import assistant, models
+from ..cache import cached
 from ..database import get_db
 from ..utils import iso, month_bounds, now_utc, severity as norm_severity, status_sql
 from .summary import drive_counts, open_alert_severity, replacement_count, scoped_dc_ids
@@ -69,6 +70,7 @@ def attention(db: Session, scope: str) -> list[dict]:
 
 
 @router.get("/dashboard")
+@cached("dashboard", ttl=30)
 def dashboard(scope: str = "all", db: Session = Depends(get_db)):
     """Everything on the dashboard in one call. Insert point 1."""
     now = now_utc()

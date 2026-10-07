@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from .. import models
+from datetime import datetime, timezone
+
+from .. import cache, models
+from ..cache import cached
 from ..database import get_db
 from ..deps import require_permission, role_of
 from ..assistant import DEFAULT_SERVICE_URL, SERVICE_URL
@@ -50,6 +53,15 @@ def _services(db: Session) -> list[dict]:
 
 @router.get("/overview")
 def overview(db: Session = Depends(get_db)):
+    """The slow part is cached for 15 s; session and cache numbers are always live."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    active = (db.query(func.count(models.UserSession.token_hash))
+              .filter(models.UserSession.revoked_at.is_(None), models.UserSession.expires_at > now).scalar() or 0)
+    return {**_overview(db=db), "sessions": {"active": active}, "cache": cache.stats()}
+
+
+@cached("admin-overview", ttl=15)
+def _overview(db: Session):
     users = db.query(models.User).all()
     roles = {"admin": 0, "technician": 0, "viewer": 0}
     for u in users:

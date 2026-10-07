@@ -42,8 +42,13 @@ def current_user(db: Session, request: Request) -> models.User | None:
     header = request.headers.get("authorization", "")
     if not header.lower().startswith("bearer "):
         return None
-    user_id = auth.read_token(header[7:].strip())
+    user_id = auth.read_session(db, header[7:].strip())
     return db.get(models.User, user_id) if user_id is not None else None
+
+
+def bearer_token(request: Request) -> str:
+    header = request.headers.get("authorization", "")
+    return header[7:].strip() if header.lower().startswith("bearer ") else ""
 
 
 def require_auth(request: Request, db: Session = Depends(get_db)):

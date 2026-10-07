@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..cache import cached
 from ..database import get_db
 from ..utils import is_open, iso, now_utc, severity as norm_severity
 
@@ -12,6 +13,7 @@ MAX_ITEMS = 100
 
 
 @router.get("/alerts")
+@cached("alerts", ttl=30)
 def list_alerts(severity: str = "all", range: str = "all", scope: str = "all", db: Session = Depends(get_db)):
     """Fleet-wide alerts with the prediction behind each one. Insert point 4."""
     query = (

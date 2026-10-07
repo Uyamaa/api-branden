@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import auth, models
 from ..database import get_db
-from ..deps import current_user, permissions_of, role_of
+from ..deps import bearer_token, current_user, permissions_of, role_of
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -21,7 +21,7 @@ def _public(u: models.User):
 
 
 @router.post("/login")
-def login(body: LoginIn, db: Session = Depends(get_db)):
+def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     email = body.email.strip().lower()
     if auth.too_many_failures(email):
         raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes and try again.")
@@ -39,7 +39,7 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Incorrect email or password.")
 
     auth.clear_failures(email)
-    return {"token": auth.create_token(user.user_id), "user": _public(user)}
+    return {"token": auth.create_session(db, user.user_id, request.headers.get("user-agent", "")), "user": _public(user)}
 
 
 @router.get("/me")
@@ -48,3 +48,19 @@ def me(request: Request, db: Session = Depends(get_db)):
     if user is None:
         raise HTTPException(status_code=401, detail="Sign in required")
     return _public(user)
+
+
+@router.post("/logout")
+def logout(request: Request, db: Session = Depends(get_db)):
+    """End this browser's session on the server (the token stops working at once)."""
+    auth.end_session(db, bearer_token(request))
+    return {"ok": True}
+
+
+@router.post("/logout-all")
+def logout_everywhere(request: Request, db: Session = Depends(get_db)):
+    """End all of my other sessions (other browsers/devices). This one stays signed in."""
+    user = current_user(db, request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    return {"ended": auth.end_user_sessions(db, user.user_id, keep_token=bearer_token(request))}

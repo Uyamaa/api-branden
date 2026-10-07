@@ -70,6 +70,15 @@ def set_role(user_id: int, body: RoleIn, request: Request, db: Session = Depends
     return _row(user)
 
 
+@router.delete("/users/{user_id}/sessions")
+def sign_user_out(user_id: int, db: Session = Depends(get_db),
+                  me: models.User | None = Depends(require_permission("manage"))):
+    """Admin only. Ends every live session of one person (a lost laptop, someone who has left)."""
+    if db.get(models.User, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"ended": auth.end_user_sessions(db, user_id)}
+
+
 @router.get("/users/{user_id}/activity", dependencies=[Depends(require_permission("manage"))])
 def user_activity(user_id: int, db: Session = Depends(get_db)):
     """What one person has done: maintenance, replacements, and the alerts on the drives they worked on."""

@@ -3,14 +3,15 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import models  # noqa: F401  (registers the tables)
+from . import cache, models  # noqa: F401  (registers the tables)
 from .database import engine
 from .deps import require_auth
 from .routers import admin, alerts, auth, dashboard, drives, entry, maintenance, replacements, reports, users
 
 # The service never touches the shared tables. It only creates the three tables it owns itself
 # (sign-in passwords, written alerts, daily dashboard numbers) if they are missing.
-OWN_TABLES = [models.UserCredential.__table__, models.AlertMessage.__table__, models.FleetSnapshot.__table__]
+OWN_TABLES = [models.UserCredential.__table__, models.AlertMessage.__table__, models.FleetSnapshot.__table__,
+              models.UserSession.__table__]
 
 
 @asynccontextmanager
@@ -28,6 +29,16 @@ app = FastAPI(title="Uyamaa Fleet API", description="Dashboard, drives, alerts, 
 
 # The frontend normally reaches this through its nginx proxy (same origin), so CORS is only a fallback.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def forget_cache_after_writes(request, call_next):
+    """Any successful change (POST/PUT/PATCH/DELETE) makes the cached pages stale, so drop them all."""
+    response = await call_next(request)
+    if (request.method in ("POST", "PUT", "PATCH", "DELETE") and response.status_code < 400
+            and not request.url.path.startswith("/api/auth/")):
+        cache.clear()
+    return response
 
 
 @app.get("/api/health")

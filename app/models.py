@@ -1,3 +1,7 @@
+"""Table definitions that match the REAL database (checked against information_schema on the server).
+
+Tables: users, data_center, hard_drive, smart_reading, prediction, maintenance, alert, replacement.
+"""
 from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
 
 from .database import Base
@@ -90,6 +94,18 @@ class UserCredential(Base):
     __tablename__ = "user_credential"
     user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
     password_hash = Column(String(100), nullable=False)
+
+
+class UserSession(Base):
+    """One signed-in browser. The token itself is never stored, only its SHA-256, so a leaked table cannot be used to sign in."""
+    __tablename__ = "user_session"
+    token_hash = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False)
+    last_seen = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    device = Column(String(120), nullable=True)
 
 
 class AlertMessage(Base):

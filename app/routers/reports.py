@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..cache import cached
 from ..database import get_db
 from ..utils import MONTHS, month_bounds, now_utc
 from .summary import drive_counts, open_alert_severity, replacement_count, scoped_dc_ids
@@ -10,6 +11,7 @@ router = APIRouter(prefix="/api", tags=["reports"])
 
 
 @router.get("/reports/summary")
+@cached("report", ttl=60)
 def report_summary(scope: str = "all", month: str = "2026-10", db: Session = Depends(get_db)):
     """Fleet aggregates for one month. Insert point 10."""
     try:

@@ -1,6 +1,6 @@
 import os
 import tempfile
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -12,17 +12,18 @@ os.environ["AUTH_REQUIRED"] = "false"  # auth is switched on inside the auth tes
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import models  # noqa: E402
+from app import cache, models  # noqa: E402
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 
 
 @pytest.fixture()
 def client():
+    cache.clear()  # each test starts with an empty cache
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     db = SessionLocal()
-    today = date.today()
+    today = datetime.now(timezone.utc).date()  # the app compares against UTC
     db.add_all([
         models.DataCenter(data_center_id=1, name="London DC-01", location="London"),
         models.DataCenter(data_center_id=2, name="Frankfurt DC-02", location="Frankfurt"),
