@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..database import get_db
-from ..deps import acting_user
+from ..deps import acting_user, require_permission
 from ..schemas import MaintenanceIn
 
 router = APIRouter(prefix="/api", tags=["maintenance"])
@@ -31,7 +31,7 @@ def list_maintenance(scope: str = "all", type: str = "all", db: Session = Depend
     return {"items": [_record(m, serial, by) for m, serial, by in rows]}
 
 
-@router.post("/maintenance", status_code=201)
+@router.post("/maintenance", status_code=201, dependencies=[Depends(require_permission("write"))])
 def create_maintenance(body: MaintenanceIn, request: Request, db: Session = Depends(get_db)):
     """Log maintenance work on a drive. Insert point 6."""
     drive = db.query(models.HardDrive).filter(models.HardDrive.serial_number == body.serial).first()
