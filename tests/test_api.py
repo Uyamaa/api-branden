@@ -119,3 +119,16 @@ def test_data_entry(client):
     assert client.post("/api/drives/NOPE/readings", json={"temperature": 1, "powerOnHours": 1}).status_code == 404
     assert client.post("/api/data-centres", json={"name": name, "location": "x"}).status_code == 409
     assert client.post("/api/data-centres", json={"name": "Cape Town DC-09", "location": "Cape Town"}).status_code == 201
+
+def test_edit_and_delete_drive(client):
+    r = client.put("/api/drives/7JG2K9HG", json={"serial": "7JG2K9HG-X", "model": "New", "capacityTb": 20, "dc": "London DC-01", "status": "Warning"})
+    assert r.status_code == 200 and r.json()["dc"] == "London DC-01" and r.json()["status"] == "warning"
+    assert client.get("/api/drives/7JG2K9HG").status_code == 404
+    assert client.put("/api/drives/7JG2K9HG-X", json={"serial": "ZL2C4M8Q", "model": "a", "capacityTb": 1, "dc": "London DC-01", "status": "Healthy"}).status_code == 409
+    assert client.put("/api/drives/NOPE", json={"serial": "n", "model": "a", "capacityTb": 1, "dc": "London DC-01", "status": "Healthy"}).status_code == 404
+    assert client.delete("/api/drives/ZL2C4M8Q").status_code == 200
+    assert client.get("/api/drives/ZL2C4M8Q").status_code == 404
+    assert client.delete("/api/drives/ZL2C4M8Q").status_code == 404
+    assert client.delete("/api/drives/7JG1R3VA").status_code == 200
+    assert client.get("/api/dashboard").status_code == 200
+    assert client.get("/api/replacements?month=2026-10").json()["monthTotal"] == 0
