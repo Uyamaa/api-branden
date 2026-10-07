@@ -7,6 +7,7 @@ import pytest
 # Tests run against a throw-away SQLite file, never the real database.
 _db = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{_db}"
+os.environ["AUTH_REQUIRED"] = "false"  # auth is switched on inside the auth tests
 
 from fastapi.testclient import TestClient  # noqa: E402
 
