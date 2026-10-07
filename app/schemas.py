@@ -16,6 +16,7 @@ class ReplacementIn(BaseModel):
     date: date
     reason: str = Field(min_length=1)
 
+
 class DataCenterIn(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     location: str = Field(min_length=1, max_length=100)
@@ -40,9 +41,15 @@ class ReadingIn(BaseModel):
     currentPendingSector: int = Field(0, ge=0)
     offlineUncorrectable: int = Field(0, ge=0)
 
+
 class DriveUpdate(BaseModel):
     serial: str = Field(min_length=1, max_length=50)
     model: str = Field(min_length=1, max_length=50)
     capacityTb: int = Field(gt=0)
     dc: str = Field(min_length=1)
     status: str = Field(min_length=1)
+
+
+class AssistantIn(BaseModel):
+    riskLevel: str | None = None
+    failureProbability: float | None = Field(default=None, ge=0, le=1)
