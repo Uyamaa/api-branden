@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import auth, models
 from ..database import get_db
-from ..deps import current_user
+from ..deps import current_user, permissions_of, role_of
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -16,7 +16,8 @@ class LoginIn(BaseModel):
 
 
 def _public(u: models.User):
-    return {"id": u.user_id, "name": u.full_name, "email": u.email, "role": u.role}
+    return {"id": u.user_id, "name": u.full_name, "email": u.email, "role": u.role,
+            "access": role_of(u), "permissions": permissions_of(u)}
 
 
 @router.post("/login")
