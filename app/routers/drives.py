@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import assistant, models
+from ..schemas import AssistantIn
 from ..database import get_db
 from ..utils import drive_status, iso, now_utc, status_sql
 
@@ -134,6 +135,8 @@ def drive_detail(serial: str, db: Session = Depends(get_db)):
         "info": {"model": drive.model, "capacityTb": drive.capacity, "dc": dc,
                  "rack": "n/a", "asset": f"DRV-{drive.drive_id}"},
         "prediction": prediction,
+        # The written alert (None for healthy drives). Not saved here; POST /assistant writes and saves it.
+        "assistant": assistant.current(db, drive),
         # smart_reading has no timestamp column; the time shown is when it was read from the database.
         "smart": {"capturedAt": now_utc().strftime("%Y-%m-%dT%H:%M:%SZ"), "readings": smart_readings(reading)},
         "alerts": [
@@ -146,3 +149,20 @@ def drive_detail(serial: str, db: Session = Depends(get_db)):
             for m, by in maint
         ],
     }
+
+
+@router.post("/drives/{serial}/assistant")
+def write_alert(serial: str, body: AssistantIn | None = None, db: Session = Depends(get_db)):
+    """Write (or rewrite) the plain-language alert for a drive and save it.
+
+    Body is optional. Send riskLevel and failureProbability (0 to 1) to use a live prediction;
+    leave it out to use the latest prediction stored in the database.
+    """
+    drive = db.query(models.HardDrive).filter(models.HardDrive.serial_number == serial).first()
+    if drive is None:
+        raise HTTPException(status_code=404, detail="Drive not found")
+    body = body or AssistantIn()
+    result = assistant.generate(db, drive, body.riskLevel, body.failureProbability)
+    if result is None:
+        raise HTTPException(status_code=422, detail="This drive is not at Medium or High risk, so no alert is needed.")
+    return result
