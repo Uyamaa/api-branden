@@ -22,9 +22,9 @@ def _row(u: models.User):
     return {"id": u.user_id, "name": u.full_name, "email": u.email, "role": u.role, "access": role_of(u)}
 
 
-@router.get("/users")
+@router.get("/users", dependencies=[Depends(require_permission("manage"))])
 def list_users(db: Session = Depends(get_db)):
-    """The directory. Anyone signed in can read it."""
+    """The directory of people. Admin only, so technicians and viewers cannot see who else has access."""
     rows = db.query(models.User).order_by(models.User.user_id).all()
     return {"items": [_row(u) for u in rows]}
 
@@ -70,7 +70,7 @@ def set_role(user_id: int, body: RoleIn, request: Request, db: Session = Depends
     return _row(user)
 
 
-@router.get("/users/{user_id}/activity")
+@router.get("/users/{user_id}/activity", dependencies=[Depends(require_permission("manage"))])
 def user_activity(user_id: int, db: Session = Depends(get_db)):
     """What one person has done: maintenance, replacements, and the alerts on the drives they worked on."""
     user = db.get(models.User, user_id)
