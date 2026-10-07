@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session, aliased
 
-from .. import models
+from .. import auth, models
 from ..database import get_db
+from ..deps import require_permission, role_of
 from ..utils import is_open, iso, severity as norm_severity
 
 router = APIRouter(prefix="/api", tags=["users"])
@@ -13,11 +18,56 @@ MAX_ALERTS = 20
 NewDrive = aliased(models.HardDrive)
 
 
+def _row(u: models.User):
+    return {"id": u.user_id, "name": u.full_name, "email": u.email, "role": u.role, "access": role_of(u)}
+
+
 @router.get("/users")
 def list_users(db: Session = Depends(get_db)):
-    """Read-only directory. Insert point 9."""
+    """The directory. Anyone signed in can read it."""
     rows = db.query(models.User).order_by(models.User.user_id).all()
-    return {"items": [{"id": u.user_id, "name": u.full_name, "email": u.email, "role": u.role} for u in rows]}
+    return {"items": [_row(u) for u in rows]}
+
+
+class UserIn(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+    email: str = Field(min_length=3, max_length=100)
+    role: Literal["admin", "technician", "viewer"] = "technician"
+    password: str = Field(min_length=8, max_length=72)
+
+
+@router.post("/users", status_code=201, dependencies=[Depends(require_permission("manage"))])
+def create_user(body: UserIn, db: Session = Depends(get_db)):
+    """Admin only. Adds a person and gives them a temporary password to sign in with."""
+    email = body.email.strip().lower()
+    if "@" not in email:
+        raise HTTPException(status_code=422, detail="Enter a valid email address.")
+    if db.query(models.User).filter(func.lower(models.User.email) == email).first():
+        raise HTTPException(status_code=409, detail="Someone with that email already exists.")
+    user = models.User(full_name=body.name.strip(), email=email, role=body.role)
+    db.add(user)
+    db.flush()
+    db.add(models.UserCredential(user_id=user.user_id, password_hash=auth.hash_password(body.password)))
+    db.commit()
+    return _row(user)
+
+
+class RoleIn(BaseModel):
+    role: Literal["admin", "technician", "viewer"]
+
+
+@router.put("/users/{user_id}/role")
+def set_role(user_id: int, body: RoleIn, request: Request, db: Session = Depends(get_db),
+             me: models.User | None = Depends(require_permission("manage"))):
+    """Admin only. Change what someone is allowed to do. Nobody can change their own role."""
+    user = db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if me is not None and me.user_id == user.user_id:
+        raise HTTPException(status_code=400, detail="You cannot change your own role.")
+    user.role = body.role
+    db.commit()
+    return _row(user)
 
 
 @router.get("/users/{user_id}/activity")
