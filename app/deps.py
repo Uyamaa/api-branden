@@ -1,19 +1,51 @@
 import os
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from . import models
+from . import auth, models
+from .database import get_db
+
+
+def auth_required() -> bool:
+    """Sign-in is required unless AUTH_REQUIRED is set to false (the tests do this)."""
+    return os.getenv("AUTH_REQUIRED", "true").strip().lower() not in ("0", "false", "no")
+
+
+def current_user(db: Session, request: Request) -> models.User | None:
+    """The person named by the Authorization: Bearer token, or None."""
+    header = request.headers.get("authorization", "")
+    if not header.lower().startswith("bearer "):
+        return None
+    user_id = auth.read_token(header[7:].strip())
+    return db.get(models.User, user_id) if user_id is not None else None
+
+
+def require_auth(request: Request, db: Session = Depends(get_db)):
+    """Guard for every data route. Skipped only when AUTH_REQUIRED=false."""
+    if not auth_required():
+        return None
+    user = current_user(db, request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    return user
 
 
 def acting_user(db: Session, request: Request) -> models.User:
     """Who is performing a write?
 
-    There is no login yet, so a write is attributed to (in order):
-      1. the X-User-Id request header (the frontend can send it once login exists),
-      2. the DEFAULT_USER_ID environment variable,
-      3. the first user in the table.
+    1. The signed-in person. An Administrator may send X-Acting-As to record work for someone else.
+    2. With no token (only possible when AUTH_REQUIRED=false): X-User-Id, DEFAULT_USER_ID, the first user.
     """
+    user = current_user(db, request)
+    if user is not None:
+        target = request.headers.get("x-acting-as")
+        if target and target.isdigit() and (user.role or "").strip().lower() == "administrator":
+            other = db.get(models.User, int(target))
+            if other is not None:
+                return other
+        return user
+
     raw = request.headers.get("x-user-id") or os.getenv("DEFAULT_USER_ID")
     user = None
     if raw and raw.isdigit():
