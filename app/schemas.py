@@ -39,3 +39,10 @@ class ReadingIn(BaseModel):
     commandTimeout: int = Field(0, ge=0)
     currentPendingSector: int = Field(0, ge=0)
     offlineUncorrectable: int = Field(0, ge=0)
+
+class DriveUpdate(BaseModel):
+    serial: str = Field(min_length=1, max_length=50)
+    model: str = Field(min_length=1, max_length=50)
+    capacityTb: int = Field(gt=0)
+    dc: str = Field(min_length=1)
+    status: str = Field(min_length=1)
