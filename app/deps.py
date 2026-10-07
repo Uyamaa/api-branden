@@ -11,6 +11,27 @@ def is_admin(user: models.User) -> bool:
     return (user.role or "").strip().lower() in ("admin", "administrator")
 
 
+# Three roles. Anything that is not an admin or a technician is treated as a viewer (read-only).
+PERMISSIONS = {
+    "admin": ["read", "write", "manage"],
+    "technician": ["read", "write"],
+    "viewer": ["read"],
+}
+
+
+def role_of(user: models.User) -> str:
+    role = (user.role or "").strip().lower()
+    if role in ("admin", "administrator"):
+        return "admin"
+    if role == "technician":
+        return "technician"
+    return "viewer"
+
+
+def permissions_of(user: models.User) -> list[str]:
+    return PERMISSIONS[role_of(user)]
+
+
 def auth_required() -> bool:
     """Sign-in is required unless AUTH_REQUIRED is set to false (the tests do this)."""
     return os.getenv("AUTH_REQUIRED", "true").strip().lower() not in ("0", "false", "no")
@@ -59,3 +80,23 @@ def acting_user(db: Session, request: Request) -> models.User:
     if user is None:
         raise HTTPException(status_code=400, detail="No users exist yet, so the action cannot be attributed.")
     return user
+
+
+def require_permission(name: str):
+    """Guard for a route: read / write (technician and up) / manage (admin only).
+
+    The check is made on the person who is signed in, never on "X-Acting-As".
+    Skipped only when AUTH_REQUIRED=false (the tests do this).
+    """
+
+    def guard(request: Request, db: Session = Depends(get_db)):
+        if not auth_required():
+            return None
+        user = current_user(db, request)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Sign in required")
+        if name not in permissions_of(user):
+            raise HTTPException(status_code=403, detail=f"Your role ({role_of(user)}) cannot do this. Ask an administrator.")
+        return user
+
+    return guard
