@@ -4,7 +4,7 @@ def test_health(client):
 
 def test_users(client):
     items = client.get("/api/users").json()["items"]
-    assert items[0] == {"id": 1, "name": "Amina Khan", "email": "amina@x.test", "role": "Administrator"}
+    assert items[0] == {"id": 1, "name": "Amina Khan", "email": "amina@x.test", "role": "Administrator", "access": "admin"}
 
 
 def test_drives_list_sorted_by_risk_and_counted(client):
@@ -104,6 +104,7 @@ def test_reports(client):
     assert oct_["replacementsByDc"] == [{"dc": "Frankfurt DC-02", "count": 1}]
     assert client.get("/api/reports/summary?month=2026-13").status_code == 422
 
+
 def test_data_entry(client):
     dcs = client.get("/api/data-centres").json()["items"]
     assert dcs
@@ -120,15 +121,32 @@ def test_data_entry(client):
     assert client.post("/api/data-centres", json={"name": name, "location": "x"}).status_code == 409
     assert client.post("/api/data-centres", json={"name": "Cape Town DC-09", "location": "Cape Town"}).status_code == 201
 
+
 def test_edit_and_delete_drive(client):
     r = client.put("/api/drives/7JG2K9HG", json={"serial": "7JG2K9HG-X", "model": "New", "capacityTb": 20, "dc": "London DC-01", "status": "Warning"})
     assert r.status_code == 200 and r.json()["dc"] == "London DC-01" and r.json()["status"] == "warning"
     assert client.get("/api/drives/7JG2K9HG").status_code == 404
     assert client.put("/api/drives/7JG2K9HG-X", json={"serial": "ZL2C4M8Q", "model": "a", "capacityTb": 1, "dc": "London DC-01", "status": "Healthy"}).status_code == 409
     assert client.put("/api/drives/NOPE", json={"serial": "n", "model": "a", "capacityTb": 1, "dc": "London DC-01", "status": "Healthy"}).status_code == 404
+    # drive 1 has a reading, prediction, alert and maintenance; drive 2 is its neighbour
     assert client.delete("/api/drives/ZL2C4M8Q").status_code == 200
     assert client.get("/api/drives/ZL2C4M8Q").status_code == 404
     assert client.delete("/api/drives/ZL2C4M8Q").status_code == 404
+    # drive 4 is the new_drive of a replacement: deleting it removes that record
     assert client.delete("/api/drives/7JG1R3VA").status_code == 200
     assert client.get("/api/dashboard").status_code == 200
     assert client.get("/api/replacements?month=2026-10").json()["monthTotal"] == 0
+
+
+def test_user_activity(client):
+    r = client.get("/api/users/1/activity")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["user"]["name"] == "Amina Khan"
+    assert body["totals"]["maintenance"] == 1 and body["totals"]["drives"] == 1
+    assert body["work"][0]["kind"] == "Maintenance" and body["work"][0]["serial"] == "ZL2C4M8Q"
+    assert body["alerts"][0]["serial"] == "ZL2C4M8Q" and body["totals"]["openAlerts"] == 1
+    body2 = client.get("/api/users/2/activity").json()
+    assert body2["totals"]["replacements"] == 1 and body2["work"][0]["kind"] == "Replacement"
+    assert "7JG1R3VA" in body2["work"][0]["detail"]
+    assert client.get("/api/users/999/activity").status_code == 404
