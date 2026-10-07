@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..database import get_db
-from ..schemas import DataCenterIn, DriveIn, ReadingIn
+from ..schemas import DataCenterIn, DriveIn, DriveUpdate, ReadingIn
 from ..utils import drive_status
 
 router = APIRouter(prefix="/api", tags=["data-entry"])
