@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import assistant, models
 from ..schemas import AssistantIn
 from ..database import get_db
+from ..deps import require_permission
 from ..utils import drive_status, iso, now_utc, status_sql
 
 router = APIRouter(prefix="/api", tags=["drives"])
@@ -151,7 +152,7 @@ def drive_detail(serial: str, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/drives/{serial}/assistant")
+@router.post("/drives/{serial}/assistant", dependencies=[Depends(require_permission("write"))])
 def write_alert(serial: str, body: AssistantIn | None = None, db: Session = Depends(get_db)):
     """Write (or rewrite) the plain-language alert for a drive and save it.
 
