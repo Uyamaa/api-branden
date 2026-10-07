@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..database import get_db
+from ..deps import require_permission
 from ..schemas import DataCenterIn, DriveIn, DriveUpdate, ReadingIn
 from ..utils import drive_status
 
@@ -16,7 +17,7 @@ def list_data_centres(db: Session = Depends(get_db)):
     return {"items": [{"id": d.data_center_id, "name": d.name, "location": d.location} for d in rows]}
 
 
-@router.post("/data-centres", status_code=201)
+@router.post("/data-centres", status_code=201, dependencies=[Depends(require_permission("manage"))])
 def create_data_centre(body: DataCenterIn, db: Session = Depends(get_db)):
     name = body.name.strip()
     if db.query(models.DataCenter).filter(models.DataCenter.name == name).first():
@@ -28,7 +29,7 @@ def create_data_centre(body: DataCenterIn, db: Session = Depends(get_db)):
     return {"id": dc.data_center_id, "name": dc.name, "location": dc.location}
 
 
-@router.post("/drives", status_code=201)
+@router.post("/drives", status_code=201, dependencies=[Depends(require_permission("write"))])
 def create_drive(body: DriveIn, db: Session = Depends(get_db)):
     """Register a new drive."""
     serial = body.serial.strip()
@@ -48,7 +49,7 @@ def create_drive(body: DriveIn, db: Session = Depends(get_db)):
             "status": drive_status(drive.status), "dc": dc.name}
 
 
-@router.post("/drives/{serial}/readings", status_code=201)
+@router.post("/drives/{serial}/readings", status_code=201, dependencies=[Depends(require_permission("write"))])
 def create_reading(serial: str, body: ReadingIn, db: Session = Depends(get_db)):
     """Record a SMART reading for a drive. The drive page always shows the newest one."""
     drive = db.query(models.HardDrive).filter(models.HardDrive.serial_number == serial).first()
@@ -74,7 +75,7 @@ def _find_drive(db: Session, serial: str) -> models.HardDrive:
     return drive
 
 
-@router.put("/drives/{serial}")
+@router.put("/drives/{serial}", dependencies=[Depends(require_permission("write"))])
 def update_drive(serial: str, body: DriveUpdate, db: Session = Depends(get_db)):
     """Edit a drive's serial, model, capacity, data centre and status."""
     drive = _find_drive(db, serial)
@@ -96,7 +97,7 @@ def update_drive(serial: str, body: DriveUpdate, db: Session = Depends(get_db)):
             "status": drive_status(drive.status), "dc": dc.name}
 
 
-@router.delete("/drives/{serial}")
+@router.delete("/drives/{serial}", dependencies=[Depends(require_permission("manage"))])
 def delete_drive(serial: str, db: Session = Depends(get_db)):
     """Delete a drive together with its own readings, predictions, alerts, maintenance and replacements."""
     drive = _find_drive(db, serial)
