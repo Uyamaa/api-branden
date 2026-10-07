@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, aliased
 
 from .. import models
 from ..database import get_db
-from ..deps import acting_user
+from ..deps import acting_user, require_permission
 from ..schemas import ReplacementIn
 from ..utils import month_bounds
 
@@ -43,7 +43,7 @@ def list_replacements(scope: str = "all", month: str = Query("2026-10"), db: Ses
     return {"monthTotal": len(items), "items": items}
 
 
-@router.post("/replacements", status_code=201)
+@router.post("/replacements", status_code=201, dependencies=[Depends(require_permission("write"))])
 def create_replacement(body: ReplacementIn, request: Request, db: Session = Depends(get_db)):
     """Record a drive swap. Insert point 8."""
     if body.oldSerial == body.newSerial:
