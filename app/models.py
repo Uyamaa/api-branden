@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
 
 from .database import Base
 
@@ -90,3 +90,26 @@ class UserCredential(Base):
     __tablename__ = "user_credential"
     user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
     password_hash = Column(String(100), nullable=False)
+
+
+class AlertMessage(Base):
+    """The latest written alert (message + steps) for a drive. One row per drive."""
+    __tablename__ = "alert_message"
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), primary_key=True)
+    risk_level = Column(String(20), nullable=False)
+    probability = Column(Float, nullable=False)
+    message = Column(Text, nullable=False)
+    steps = Column(Text, nullable=False)  # JSON list of strings
+    source = Column(String(10), nullable=False)  # "llm" or "template"
+    created_at = Column(DateTime, nullable=False)
+
+
+class FleetSnapshot(Base):
+    """One row per day and scope, written when the dashboard loads. Feeds the trend lines."""
+    __tablename__ = "fleet_snapshot"
+    snapshot_date = Column(Date, primary_key=True)
+    scope = Column(String(50), primary_key=True)
+    total_drives = Column(Integer, nullable=False)
+    at_risk = Column(Integer, nullable=False)
+    open_alerts = Column(Integer, nullable=False)
+    replacements = Column(Integer, nullable=False)
