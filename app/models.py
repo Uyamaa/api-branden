@@ -83,3 +83,10 @@ class Replacement(Base):
     replaced_by = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     reason = Column(Text, nullable=False)
     new_drive_id = Column(Integer, nullable=False)
+
+
+class UserCredential(Base):
+    """Sign-in secret for a user. Kept apart from `users` so other services are unaffected."""
+    __tablename__ = "user_credential"
+    user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
+    password_hash = Column(String(100), nullable=False)
