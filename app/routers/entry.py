@@ -65,3 +65,53 @@ def create_reading(serial: str, body: ReadingIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(reading)
     return {"id": reading.reading_id, "serial": serial}
+
+def _find_drive(db: Session, serial: str) -> models.HardDrive:
+    drive = db.query(models.HardDrive).filter(models.HardDrive.serial_number == serial).first()
+    if drive is None:
+        raise HTTPException(status_code=404, detail=f"Drive {serial} not found")
+    return drive
+
+
+@router.put("/drives/{serial}")
+def update_drive(serial: str, body: DriveUpdate, db: Session = Depends(get_db)):
+    """Edit a drive's serial, model, capacity, data centre and status."""
+    drive = _find_drive(db, serial)
+    new_serial = body.serial.strip()
+    if new_serial != drive.serial_number and db.query(models.HardDrive).filter(
+            models.HardDrive.serial_number == new_serial).first():
+        raise HTTPException(status_code=409, detail=f"Drive {new_serial} already exists")
+    dc = db.query(models.DataCenter).filter(models.DataCenter.name == body.dc).first()
+    if dc is None:
+        raise HTTPException(status_code=404, detail=f"Data centre {body.dc} not found")
+    drive.serial_number = new_serial
+    drive.model = body.model.strip()
+    drive.capacity = body.capacityTb
+    drive.data_center_id = dc.data_center_id
+    drive.status = body.status.strip()
+    db.commit()
+    db.refresh(drive)
+    return {"serial": drive.serial_number, "model": drive.model, "capacityTb": drive.capacity,
+            "status": drive_status(drive.status), "dc": dc.name}
+
+
+@router.delete("/drives/{serial}")
+def delete_drive(serial: str, db: Session = Depends(get_db)):
+    """Delete a drive together with its own readings, predictions, alerts, maintenance and replacements."""
+    drive = _find_drive(db, serial)
+    did = drive.drive_id
+    pred_ids = [p for (p,) in db.query(models.Prediction.prediction_id).filter(models.Prediction.drive_id == did)]
+
+    db.query(models.Alert).filter(models.Alert.drive_id == did).delete(synchronize_session=False)
+    db.query(models.SmartReading).filter(models.SmartReading.drive_id == did).delete(synchronize_session=False)
+    db.query(models.Maintenance).filter(models.Maintenance.drive_id == did).delete(synchronize_session=False)
+    db.query(models.Replacement).filter(
+        (models.Replacement.drive_id == did) | (models.Replacement.new_drive_id == did)
+    ).delete(synchronize_session=False)
+    # A prediction is kept if another drive's alert still points at it.
+    for pid in pred_ids:
+        if not db.query(models.Alert).filter(models.Alert.prediction_id == pid).first():
+            db.query(models.Prediction).filter(models.Prediction.prediction_id == pid).delete(synchronize_session=False)
+    db.delete(drive)
+    db.commit()
+    return {"deleted": serial}
