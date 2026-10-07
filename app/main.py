@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import models  # noqa: F401  (registers the tables)
 from .database import engine
 from .deps import require_auth
-from .routers import alerts, auth, dashboard, drives, entry, maintenance, replacements, reports, users
+from .routers import admin, alerts, auth, dashboard, drives, entry, maintenance, replacements, reports, users
 
 # The service never touches the shared tables. It only creates the three tables it owns itself
 # (sign-in passwords, written alerts, daily dashboard numbers) if they are missing.
@@ -35,7 +35,7 @@ def health():
     return {"status": "ok"}
 
 
-for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports):
+for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports, admin):
     app.include_router(module.router, dependencies=[Depends(require_auth)])
 
 # Sign-in itself must stay open.
