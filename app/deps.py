@@ -7,6 +7,10 @@ from . import auth, models
 from .database import get_db
 
 
+def is_admin(user: models.User) -> bool:
+    return (user.role or "").strip().lower() in ("admin", "administrator")
+
+
 def auth_required() -> bool:
     """Sign-in is required unless AUTH_REQUIRED is set to false (the tests do this)."""
     return os.getenv("AUTH_REQUIRED", "true").strip().lower() not in ("0", "false", "no")
@@ -40,7 +44,7 @@ def acting_user(db: Session, request: Request) -> models.User:
     user = current_user(db, request)
     if user is not None:
         target = request.headers.get("x-acting-as")
-        if target and target.isdigit() and (user.role or "").strip().lower() == "administrator":
+        if target and target.isdigit() and is_admin(user):
             other = db.get(models.User, int(target))
             if other is not None:
                 return other
