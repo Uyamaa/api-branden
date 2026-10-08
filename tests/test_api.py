@@ -11,7 +11,7 @@ def test_drives_list_sorted_by_risk_and_counted(client):
     body = client.get("/api/drives").json()
     assert body["total"] == 4
     assert [d["serial"] for d in body["items"]][:2] == ["ZL2C4M8Q", "ZL2C4M9R"]
-    assert body["items"][0] == {"id": 1, "serial": "ZL2C4M8Q", "model": "Exos X18", "capacityTb": 18, "status": "critical", "dc": "London DC-01"}
+    assert body["items"][0] == {"id": 1, "serial": "ZL2C4M8Q", "model": "Exos X18", "capacityTb": 18, "status": "critical", "dc": "London DC-01", "lastReadingAt": None, "hasReading": True}
 
 
 def test_drives_filters_and_paging(client):

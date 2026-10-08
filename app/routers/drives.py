@@ -69,9 +69,16 @@ def list_drives(
         .limit(page_size)
         .all()
     )
+    # When each drive on this page last reported (None = no reading, or the reading has no time recorded).
+    ids = [d.drive_id for d, _ in rows]
+    last = dict(db.query(models.SmartReading.drive_id, func.max(models.SmartReading.collected_at))
+                .filter(models.SmartReading.drive_id.in_(ids)).group_by(models.SmartReading.drive_id).all()) if ids else {}
+    has_reading = {r[0] for r in db.query(models.SmartReading.drive_id)
+                   .filter(models.SmartReading.drive_id.in_(ids)).distinct().all()} if ids else set()
     items = [
         {"id": d.drive_id, "serial": d.serial_number, "model": d.model, "capacityTb": d.capacity,
-         "status": drive_status(d.status), "dc": dc}
+         "status": drive_status(d.status), "dc": dc, "lastReadingAt": iso(last.get(d.drive_id)),
+         "hasReading": d.drive_id in has_reading}
         for d, dc in rows
     ]
     return {"total": total, "items": items}

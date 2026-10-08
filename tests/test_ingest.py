@@ -170,3 +170,12 @@ def test_migration_adds_the_column_once_and_is_safe_to_repeat():
     assert migrate.ensure_collected_at(engine) == "added"
     assert "collected_at" in {c["name"] for c in inspect(engine).get_columns("smart_reading")}
     assert migrate.ensure_collected_at(engine) == "present"
+
+
+def test_drive_list_shows_when_each_drive_last_reported(feed):
+    when = iso_ago(minutes=7)
+    post(feed, [reading("LIST-1", collectedAt=when)])
+    items = {i["serial"]: i for i in feed.get("/api/drives?page_size=50").json()["items"]}
+    assert items["LIST-1"]["lastReadingAt"] == when and items["LIST-1"]["hasReading"] is True
+    assert items["ZL2C4M8Q"]["lastReadingAt"] is None and items["ZL2C4M8Q"]["hasReading"] is True   # old reading, no time
+    assert items["7JG1R3VA"]["hasReading"] is False                                                   # never reported
