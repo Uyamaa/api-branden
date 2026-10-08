@@ -45,6 +45,8 @@ class SmartReading(Base):
     command_timeout = Column(Integer, nullable=False)
     current_pending_sector = Column(Integer, nullable=False)
     offline_uncorrectable = Column(Integer, nullable=False)
+    # When the reading was taken (UTC). Empty for readings entered before this column existed.
+    collected_at = Column(DateTime, nullable=True)
 
 
 class Prediction(Base):

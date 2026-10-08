@@ -99,7 +99,7 @@ def drive_detail(serial: str, db: Session = Depends(get_db)):
     reading = (
         db.query(models.SmartReading)
         .filter(models.SmartReading.drive_id == drive.drive_id)
-        .order_by(models.SmartReading.reading_id.desc())
+        .order_by(models.SmartReading.collected_at.desc().nullslast(), models.SmartReading.reading_id.desc())
         .first()
     )
     alerts = (
@@ -138,8 +138,9 @@ def drive_detail(serial: str, db: Session = Depends(get_db)):
         "prediction": prediction,
         # The written alert (None for healthy drives). Not saved here; POST /assistant writes and saves it.
         "assistant": assistant.current(db, drive),
-        # smart_reading has no timestamp column; the time shown is when it was read from the database.
-        "smart": {"capturedAt": now_utc().strftime("%Y-%m-%dT%H:%M:%SZ"), "readings": smart_readings(reading)},
+        # capturedAt is when the reading was taken; None for readings entered before the column existed.
+        "smart": {"capturedAt": iso(reading.collected_at) if reading is not None and reading.collected_at else None,
+                  "readings": smart_readings(reading)},
         "alerts": [
             {"id": a.alert_id, "ts": iso(a.alert_date), "type": a.alert_type, "severity": a.severity.lower(),
              "confidence": None if conf is None else round(conf * 100), "outcome": a.outcome}

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .. import cache, models
 from ..cache import cached
@@ -16,6 +16,8 @@ from ..deps import require_permission, role_of
 from ..assistant import DEFAULT_SERVICE_URL, SERVICE_URL
 from ..utils import iso, status_sql
 from .summary import open_alert_severity
+
+STALE_HOURS = 24
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_permission("manage"))])
 
@@ -89,6 +91,14 @@ def _overview(db: Session):
                    .outerjoin(models.SmartReading, models.SmartReading.drive_id == models.HardDrive.drive_id)
                    .filter(models.SmartReading.drive_id.is_(None)).scalar() or 0)
 
+    # Data feed: when the newest reading arrived, and which drives have gone quiet (only drives with timestamps count).
+    stale_before = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=STALE_HOURS)
+    newest = {drive_id: when for drive_id, when in
+              db.query(models.SmartReading.drive_id, func.max(models.SmartReading.collected_at))
+              .group_by(models.SmartReading.drive_id).all() if when is not None}
+    stale = sum(1 for when in newest.values() if when < stale_before)
+    last_reading = max(newest.values()) if newest else None
+
     names = {u.user_id: u.full_name for u in users}
     serial = {d.drive_id: d.serial_number for d in db.query(models.HardDrive).all()}
     events = []
@@ -109,6 +119,8 @@ def _overview(db: Session):
             attention.append({"level": "warn", "text": f"{s['name']} is {'not answering' if s['state'] == 'down' else 'slow'}", "to": None})
     if no_readings:
         attention.append({"level": "warn", "text": f"{no_readings} drive{'s' if no_readings != 1 else ''} with no SMART reading yet", "to": "/drives"})
+    if stale:
+        attention.append({"level": "warn", "text": f"{stale} drive{'s' if stale != 1 else ''} not reported in {STALE_HOURS} h", "to": "/drives"})
     if cannot_sign_in:
         attention.append({"level": "warn", "text": f"{len(cannot_sign_in)} user{'s' if len(cannot_sign_in) != 1 else ''} cannot sign in yet (no password set)", "to": None})
 
@@ -120,4 +132,6 @@ def _overview(db: Session):
         "attention": attention,
         "activity": events[:10],
         "services": services,
+        "feed": {"enabled": bool(os.getenv("INGEST_API_KEY")), "lastReadingAt": iso(last_reading),
+                 "reportingDrives": len(newest), "staleDrives": stale, "staleHours": STALE_HOURS},
     }

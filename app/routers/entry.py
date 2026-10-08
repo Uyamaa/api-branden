@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -60,7 +62,7 @@ def create_reading(serial: str, body: ReadingIn, db: Session = Depends(get_db)):
         reallocated_sectors=body.reallocatedSectors, spin_retry_count=body.spinRetryCount,
         end_to_end_error=body.endToEndError, reported_uncorrectable=body.reportedUncorrectable,
         command_timeout=body.commandTimeout, current_pending_sector=body.currentPendingSector,
-        offline_uncorrectable=body.offlineUncorrectable,
+        offline_uncorrectable=body.offlineUncorrectable, collected_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(reading)
     db.commit()

@@ -3,10 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import cache, models  # noqa: F401  (registers the tables)
+from . import cache, migrate, models  # noqa: F401  (registers the tables)
 from .database import engine
 from .deps import require_auth
-from .routers import admin, alerts, auth, dashboard, drives, entry, maintenance, replacements, reports, users
+from .routers import admin, alerts, auth, dashboard, drives, entry, ingest, maintenance, replacements, reports, users
 
 # The service never touches the shared tables. It only creates the three tables it owns itself
 # (sign-in passwords, written alerts, daily dashboard numbers) if they are missing.
@@ -16,6 +16,7 @@ OWN_TABLES = [models.UserCredential.__table__, models.AlertMessage.__table__, mo
 
 @asynccontextmanager
 async def lifespan(_app):
+    migrate.ensure_collected_at(engine)
     try:
         for table in OWN_TABLES:
             table.create(bind=engine, checkfirst=True)
@@ -43,7 +44,9 @@ async def forget_cache_after_writes(request, call_next):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    if migrate.status["collected_at"].startswith("failed"):
+        migrate.ensure_collected_at(engine)  # the database may simply not have been ready at startup
+    return {"status": "ok", "collectedAt": migrate.status["collected_at"]}
 
 
 for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports, admin):
@@ -51,3 +54,5 @@ for module in (dashboard, drives, entry, alerts, maintenance, replacements, user
 
 # Sign-in itself must stay open.
 app.include_router(auth.router)
+# Collectors sign in with an API key (X-Ingest-Key), not a person's token.
+app.include_router(ingest.router)
