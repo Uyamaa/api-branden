@@ -32,6 +32,7 @@ jobs:
       - name: Build and deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
         run: |
           docker compose build
           docker compose push

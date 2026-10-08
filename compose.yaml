@@ -1,13 +1,13 @@
 services:
-  fleet-api:
-    image: ghcr.io/uyamaa/uyamaa-fleet-api:latest
+  api-branden:
+    image: ghcr.io/uyamaa/api-branden:latest
     build:
       context: .
-    container_name: uyamaa_fleet_api
+    container_name: api-branden-container
     environment:
       DATABASE_URL: ${DATABASE_URL}
       DEFAULT_USER_ID: ${DEFAULT_USER_ID:-}
       INGEST_API_KEY: ${INGEST_API_KEY:-}
     ports:
-      - "8004:8000"
+      - "8002:8000"
     restart: unless-stopped
