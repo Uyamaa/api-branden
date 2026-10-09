@@ -132,3 +132,23 @@ class FleetSnapshot(Base):
     at_risk = Column(Integer, nullable=False)
     open_alerts = Column(Integer, nullable=False)
     replacements = Column(Integer, nullable=False)
+
+
+class ProposedAction(Base):
+    """A step the assistant (or the rules) suggests for a drive. Nothing happens until a person approves it."""
+    __tablename__ = "proposed_action"
+    proposal_id = Column(Integer, primary_key=True, index=True)
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), nullable=False, index=True)
+    prediction_id = Column(Integer, nullable=True)       # the prediction this suggestion was made for
+    batch_id = Column(String(36), nullable=False)        # suggestions made together share a batch
+    seq = Column(Integer, nullable=False)                # order: 1 comes before 2
+    kind = Column(String(30), nullable=False)            # log_maintenance | record_replacement
+    payload = Column(Text, nullable=False)               # JSON: what the draft contains
+    rationale = Column(Text, nullable=True)              # why it is suggested, in words
+    status = Column(String(20), nullable=False)          # pending | approved | skipped | superseded
+    source = Column(String(10), nullable=False)          # rules | agent
+    run_id = Column(String(80), nullable=True)           # the agent run waiting for this decision
+    created_at = Column(DateTime, nullable=False)
+    decided_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    decided_at = Column(DateTime, nullable=True)
+    result_id = Column(Integer, nullable=True)           # the maintenance or replacement record that approval created
