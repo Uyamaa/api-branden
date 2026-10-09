@@ -1,7 +1,3 @@
-"""Table definitions that match the REAL database (checked against information_schema on the server).
-
-Tables: users, data_center, hard_drive, smart_reading, prediction, maintenance, alert, replacement.
-"""
 from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
 
 from .database import Base
@@ -66,6 +62,11 @@ class Maintenance(Base):
     maintenance_date = Column(Date, nullable=False)
     maintenance_type = Column(String(50), nullable=False)
     performed_by = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    # A record added by mistake is voided, never deleted, so the history keeps who did what and why.
+    # These three columns are nullable additions (see migrate.ensure_maintenance_void).
+    voided_at = Column(DateTime, nullable=True)
+    voided_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    void_reason = Column(String(200), nullable=True)
 
 
 class Alert(Base):
