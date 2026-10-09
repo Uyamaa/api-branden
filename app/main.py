@@ -17,6 +17,7 @@ OWN_TABLES = [models.UserCredential.__table__, models.AlertMessage.__table__, mo
 @asynccontextmanager
 async def lifespan(_app):
     migrate.ensure_collected_at(engine)
+    migrate.ensure_maintenance_void(engine)
     try:
         for table in OWN_TABLES:
             table.create(bind=engine, checkfirst=True)
@@ -46,7 +47,9 @@ async def forget_cache_after_writes(request, call_next):
 def health():
     if migrate.status["collected_at"].startswith("failed"):
         migrate.ensure_collected_at(engine)  # the database may simply not have been ready at startup
-    return {"status": "ok", "collectedAt": migrate.status["collected_at"]}
+    if migrate.status["maintenance_void"].startswith("failed"):
+        migrate.ensure_maintenance_void(engine)
+    return {"status": "ok", "collectedAt": migrate.status["collected_at"], "maintenanceVoid": migrate.status["maintenance_void"]}
 
 
 for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports, admin):
