@@ -119,7 +119,7 @@ def drive_detail(serial: str, db: Session = Depends(get_db)):
     maint = (
         db.query(models.Maintenance, models.User.full_name)
         .outerjoin(models.User, models.User.user_id == models.Maintenance.performed_by)
-        .filter(models.Maintenance.drive_id == drive.drive_id)
+        .filter(models.Maintenance.drive_id == drive.drive_id, models.Maintenance.voided_at.is_(None))
         .order_by(models.Maintenance.maintenance_date.desc(), models.Maintenance.maintenance_id.desc())
         .all()
     )
