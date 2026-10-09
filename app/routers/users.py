@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -139,4 +140,42 @@ def user_activity(user_id: int, db: Session = Depends(get_db)):
              "severity": norm_severity(a.severity), "outcome": a.outcome}
             for a, serial in alerts[:MAX_ALERTS]
         ],
+    }
+
+
+@router.get("/reports/team", dependencies=[Depends(require_permission("manage"))])
+def team_report(days: int = 30, role: str = "all", db: Session = Depends(get_db)):
+    """Who did how much work. days=0 means all time. Admin only. Voided maintenance is not counted."""
+    since = date.today() - timedelta(days=days) if days > 0 else None
+    people = db.query(models.User).order_by(models.User.user_id).all()
+    if role != "all":
+        people = [u for u in people if role_of(u) == role]
+
+    maint = db.query(models.Maintenance).filter(models.Maintenance.voided_at.is_(None))
+    repl = db.query(models.Replacement)
+    if since is not None:
+        maint = maint.filter(models.Maintenance.maintenance_date >= since)
+        repl = repl.filter(models.Replacement.replacement_date >= since)
+    maint, repl = maint.all(), repl.all()
+
+    rows = []
+    for u in people:
+        mine_m = [m for m in maint if m.performed_by == u.user_id]
+        mine_r = [r for r in repl if r.replaced_by == u.user_id]
+        drives = {m.drive_id for m in mine_m} | {r.drive_id for r in mine_r}
+        rows.append({"id": u.user_id, "name": u.full_name, "role": role_of(u), "jobs": len(mine_m),
+                     "replacements": len(mine_r), "drives": len(drives)})
+    rows.sort(key=lambda r: (-(r["jobs"] + r["replacements"]), r["name"]))
+    ids = {r["id"] for r in rows}
+    shown_m = [m for m in maint if m.performed_by in ids]
+    shown_r = [r for r in repl if r.replaced_by in ids]
+    top = rows[0] if rows and (rows[0]["jobs"] + rows[0]["replacements"]) > 0 else None
+    return {
+        "days": days,
+        "totals": {
+            "jobs": len(shown_m), "replacements": len(shown_r),
+            "drives": len({m.drive_id for m in shown_m} | {r.drive_id for r in shown_r}),
+        },
+        "mostActive": {"name": top["name"], "count": top["jobs"] + top["replacements"]} if top else None,
+        "people": rows,
     }
