@@ -6,12 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import cache, migrate, models  # noqa: F401  (registers the tables)
 from .database import engine
 from .deps import require_auth
-from .routers import admin, alerts, auth, dashboard, drives, entry, ingest, maintenance, replacements, reports, users
+from .routers import admin, alerts, auth, dashboard, drives, entry, ingest, maintenance, proposals, replacements, reports, users
 
 # The service never touches the shared tables. It only creates the three tables it owns itself
 # (sign-in passwords, written alerts, daily dashboard numbers) if they are missing.
 OWN_TABLES = [models.UserCredential.__table__, models.AlertMessage.__table__, models.FleetSnapshot.__table__,
-              models.UserSession.__table__]
+              models.UserSession.__table__, models.ProposedAction.__table__]
 
 
 @asynccontextmanager
@@ -52,10 +52,11 @@ def health():
     return {"status": "ok", "collectedAt": migrate.status["collected_at"], "maintenanceVoid": migrate.status["maintenance_void"]}
 
 
-for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports, admin):
+for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports, admin, proposals):
     app.include_router(module.router, dependencies=[Depends(require_auth)])
 
 # Sign-in itself must stay open.
 app.include_router(auth.router)
 # Collectors sign in with an API key (X-Ingest-Key), not a person's token.
 app.include_router(ingest.router)
+app.include_router(proposals.machine_router)
