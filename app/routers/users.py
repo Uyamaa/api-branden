@@ -90,7 +90,7 @@ def user_activity(user_id: int, db: Session = Depends(get_db)):
         db.query(models.Maintenance, models.HardDrive.serial_number, models.DataCenter.name)
         .join(models.HardDrive, models.HardDrive.drive_id == models.Maintenance.drive_id)
         .join(models.DataCenter, models.DataCenter.data_center_id == models.Maintenance.data_center_id)
-        .filter(models.Maintenance.performed_by == user_id)
+        .filter(models.Maintenance.performed_by == user_id, models.Maintenance.voided_at.is_(None))
         .all()
     )
     repl = (
