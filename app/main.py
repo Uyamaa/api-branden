@@ -1,62 +1,154 @@
-from contextlib import asynccontextmanager
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
 
-from fastapi import Depends, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from . import cache, migrate, models  # noqa: F401  (registers the tables)
-from .database import engine
-from .deps import require_auth
-from .routers import admin, alerts, auth, dashboard, drives, entry, ingest, maintenance, proposals, replacements, reports, users
-
-# The service never touches the shared tables. It only creates the three tables it owns itself
-# (sign-in passwords, written alerts, daily dashboard numbers) if they are missing.
-OWN_TABLES = [models.UserCredential.__table__, models.AlertMessage.__table__, models.FleetSnapshot.__table__,
-              models.UserSession.__table__, models.ProposedAction.__table__]
+from .database import Base
 
 
-@asynccontextmanager
-async def lifespan(_app):
-    migrate.ensure_collected_at(engine)
-    migrate.ensure_maintenance_void(engine)
-    try:
-        for table in OWN_TABLES:
-            table.create(bind=engine, checkfirst=True)
-    except Exception as exc:  # database not reachable yet: the first request will say so
-        print(f"could not check the service's own tables: {exc}")
-    yield
+class User(Base):
+    __tablename__ = "users"
+    user_id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String(50), nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    role = Column(String(20), nullable=False)
 
 
-app = FastAPI(title="Uyamaa Fleet API", description="Dashboard, drives, alerts, maintenance, replacements, users and reports.",
-              lifespan=lifespan)
-
-# The frontend normally reaches this through its nginx proxy (same origin), so CORS is only a fallback.
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-
-@app.middleware("http")
-async def forget_cache_after_writes(request, call_next):
-    """Any successful change (POST/PUT/PATCH/DELETE) makes the cached pages stale, so drop them all."""
-    response = await call_next(request)
-    if (request.method in ("POST", "PUT", "PATCH", "DELETE") and response.status_code < 400
-            and not request.url.path.startswith("/api/auth/")):
-        cache.clear()
-    return response
+class DataCenter(Base):
+    __tablename__ = "data_center"
+    data_center_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), nullable=False)
+    location = Column(String(100), nullable=False)
 
 
-@app.get("/api/health")
-def health():
-    if migrate.status["collected_at"].startswith("failed"):
-        migrate.ensure_collected_at(engine)  # the database may simply not have been ready at startup
-    if migrate.status["maintenance_void"].startswith("failed"):
-        migrate.ensure_maintenance_void(engine)
-    return {"status": "ok", "collectedAt": migrate.status["collected_at"], "maintenanceVoid": migrate.status["maintenance_void"]}
+class HardDrive(Base):
+    __tablename__ = "hard_drive"
+    drive_id = Column(Integer, primary_key=True, index=True)
+    data_center_id = Column(Integer, ForeignKey("data_center.data_center_id"), nullable=False)
+    serial_number = Column(String(50), unique=True, nullable=False)
+    model = Column(String(50), nullable=False)
+    capacity = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False)
 
 
-for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports, admin, proposals):
-    app.include_router(module.router, dependencies=[Depends(require_auth)])
+class SmartReading(Base):
+    __tablename__ = "smart_reading"
+    reading_id = Column(Integer, primary_key=True, index=True)
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), nullable=False)
+    temperature = Column(Float, nullable=False)
+    power_on_hours = Column(Integer, nullable=False)
+    reallocated_sectors = Column(Integer, nullable=False)
+    spin_retry_count = Column(Integer, nullable=False)
+    end_to_end_error = Column(Integer, nullable=False)
+    reported_uncorrectable = Column(Integer, nullable=False)
+    command_timeout = Column(Integer, nullable=False)
+    current_pending_sector = Column(Integer, nullable=False)
+    offline_uncorrectable = Column(Integer, nullable=False)
+    # When the reading was taken (UTC). Empty for readings entered before this column existed.
+    collected_at = Column(DateTime, nullable=True)
 
-# Sign-in itself must stay open.
-app.include_router(auth.router)
-# Collectors sign in with an API key (X-Ingest-Key), not a person's token.
-app.include_router(ingest.router)
-app.include_router(proposals.machine_router)
+
+class Prediction(Base):
+    __tablename__ = "prediction"
+    prediction_id = Column(Integer, primary_key=True, index=True)
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), nullable=False)
+    predicted_failure_date = Column(Date, nullable=False)
+    risk_level = Column(String(20), nullable=False)
+    confidence_level = Column(Float, nullable=False)
+
+
+class Maintenance(Base):
+    __tablename__ = "maintenance"
+    maintenance_id = Column(Integer, primary_key=True, index=True)
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), nullable=False)
+    data_center_id = Column(Integer, ForeignKey("data_center.data_center_id"), nullable=False)
+    maintenance_date = Column(Date, nullable=False)
+    maintenance_type = Column(String(50), nullable=False)
+    performed_by = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    # A record added by mistake is voided, never deleted, so the history keeps who did what and why.
+    # These three columns are nullable additions (see migrate.ensure_maintenance_void).
+    voided_at = Column(DateTime, nullable=True)
+    voided_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    void_reason = Column(String(200), nullable=True)
+
+
+class Alert(Base):
+    __tablename__ = "alert"
+    alert_id = Column(Integer, primary_key=True, index=True)
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), nullable=False)
+    prediction_id = Column(Integer, ForeignKey("prediction.prediction_id"), nullable=False)
+    data_center_id = Column(Integer, ForeignKey("data_center.data_center_id"), nullable=False)
+    alert_date = Column(Date, nullable=False)
+    alert_type = Column(String(50), nullable=False)
+    severity = Column(String(20), nullable=False)
+    outcome = Column(Text, nullable=False)
+
+
+class Replacement(Base):
+    __tablename__ = "replacement"
+    replacement_id = Column(Integer, primary_key=True, index=True)
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), nullable=False)
+    data_center_id = Column(Integer, ForeignKey("data_center.data_center_id"), nullable=False)
+    replacement_date = Column(Date, nullable=False)
+    replaced_by = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    reason = Column(Text, nullable=False)
+    new_drive_id = Column(Integer, nullable=False)
+
+
+class UserCredential(Base):
+    """Sign-in secret for a user. Kept apart from `users` so other services are unaffected."""
+    __tablename__ = "user_credential"
+    user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
+    password_hash = Column(String(100), nullable=False)
+
+
+class UserSession(Base):
+    """One signed-in browser. The token itself is never stored, only its SHA-256, so a leaked table cannot be used to sign in."""
+    __tablename__ = "user_session"
+    token_hash = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False)
+    last_seen = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    device = Column(String(120), nullable=True)
+
+
+class AlertMessage(Base):
+    """The latest written alert (message + steps) for a drive. One row per drive."""
+    __tablename__ = "alert_message"
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), primary_key=True)
+    risk_level = Column(String(20), nullable=False)
+    probability = Column(Float, nullable=False)
+    message = Column(Text, nullable=False)
+    steps = Column(Text, nullable=False)  # JSON list of strings
+    source = Column(String(10), nullable=False)  # "llm" or "template"
+    created_at = Column(DateTime, nullable=False)
+
+
+class FleetSnapshot(Base):
+    """One row per day and scope, written when the dashboard loads. Feeds the trend lines."""
+    __tablename__ = "fleet_snapshot"
+    snapshot_date = Column(Date, primary_key=True)
+    scope = Column(String(50), primary_key=True)
+    total_drives = Column(Integer, nullable=False)
+    at_risk = Column(Integer, nullable=False)
+    open_alerts = Column(Integer, nullable=False)
+    replacements = Column(Integer, nullable=False)
+
+
+class ProposedAction(Base):
+    """A step the assistant (or the rules) suggests for a drive. Nothing happens until a person approves it."""
+    __tablename__ = "proposed_action"
+    proposal_id = Column(Integer, primary_key=True, index=True)
+    drive_id = Column(Integer, ForeignKey("hard_drive.drive_id"), nullable=False, index=True)
+    prediction_id = Column(Integer, nullable=True)       # the prediction this suggestion was made for
+    batch_id = Column(String(36), nullable=False)        # suggestions made together share a batch
+    seq = Column(Integer, nullable=False)                # order: 1 comes before 2
+    kind = Column(String(30), nullable=False)            # log_maintenance | record_replacement
+    payload = Column(Text, nullable=False)               # JSON: what the draft contains
+    rationale = Column(Text, nullable=True)              # why it is suggested, in words
+    status = Column(String(20), nullable=False)          # pending | approved | skipped | superseded
+    source = Column(String(10), nullable=False)          # rules | agent
+    run_id = Column(String(80), nullable=True)           # the agent run waiting for this decision
+    created_at = Column(DateTime, nullable=False)
+    decided_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    decided_at = Column(DateTime, nullable=True)
+    result_id = Column(Integer, nullable=True)           # the maintenance or replacement record that approval created
