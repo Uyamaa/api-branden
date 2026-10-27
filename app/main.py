@@ -3,20 +3,19 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import cache, migrate, models  # noqa: F401  (registers the tables)
+from . import cache, migrate, models 
 from .database import engine
 from .deps import require_auth
-from .routers import admin, alerts, auth, dashboard, drives, entry, ingest, maintenance, replacements, reports, users
+from .routers import admin, alerts, auth, dashboard, drives, entry, ingest, maintenance, proposals, replacements, reports, users
 
-# The service never touches the shared tables. It only creates the three tables it owns itself
-# (sign-in passwords, written alerts, daily dashboard numbers) if they are missing.
 OWN_TABLES = [models.UserCredential.__table__, models.AlertMessage.__table__, models.FleetSnapshot.__table__,
-              models.UserSession.__table__]
+              models.UserSession.__table__, models.ProposedAction.__table__]
 
 
 @asynccontextmanager
 async def lifespan(_app):
     migrate.ensure_collected_at(engine)
+    migrate.ensure_maintenance_void(engine)
     try:
         for table in OWN_TABLES:
             table.create(bind=engine, checkfirst=True)
@@ -28,7 +27,6 @@ async def lifespan(_app):
 app = FastAPI(title="Uyamaa Fleet API", description="Dashboard, drives, alerts, maintenance, replacements, users and reports.",
               lifespan=lifespan)
 
-# The frontend normally reaches this through its nginx proxy (same origin), so CORS is only a fallback.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -46,13 +44,14 @@ async def forget_cache_after_writes(request, call_next):
 def health():
     if migrate.status["collected_at"].startswith("failed"):
         migrate.ensure_collected_at(engine)  # the database may simply not have been ready at startup
-    return {"status": "ok", "collectedAt": migrate.status["collected_at"]}
+    if migrate.status["maintenance_void"].startswith("failed"):
+        migrate.ensure_maintenance_void(engine)
+    return {"status": "ok", "collectedAt": migrate.status["collected_at"], "maintenanceVoid": migrate.status["maintenance_void"]}
 
 
-for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports, admin):
+for module in (dashboard, drives, entry, alerts, maintenance, replacements, users, reports, admin, proposals):
     app.include_router(module.router, dependencies=[Depends(require_auth)])
 
-# Sign-in itself must stay open.
 app.include_router(auth.router)
-# Collectors sign in with an API key (X-Ingest-Key), not a person's token.
 app.include_router(ingest.router)
+app.include_router(proposals.machine_router)

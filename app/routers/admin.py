@@ -1,4 +1,3 @@
-"""Numbers for the Admin page. Admin only."""
 import os
 import time
 
@@ -102,7 +101,7 @@ def _overview(db: Session):
     names = {u.user_id: u.full_name for u in users}
     serial = {d.drive_id: d.serial_number for d in db.query(models.HardDrive).all()}
     events = []
-    for m in db.query(models.Maintenance).order_by(models.Maintenance.maintenance_date.desc()).limit(8).all():
+    for m in db.query(models.Maintenance).filter(models.Maintenance.voided_at.is_(None)).order_by(models.Maintenance.maintenance_date.desc()).limit(8).all():
         events.append({"date": iso(m.maintenance_date), "kind": "Maintenance",
                        "text": f"{names.get(m.performed_by, 'Someone')} logged {m.maintenance_type.lower()} on {serial.get(m.drive_id, 'a drive')}"})
     for r in db.query(models.Replacement).order_by(models.Replacement.replacement_date.desc()).limit(8).all():

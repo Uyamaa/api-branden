@@ -2,12 +2,27 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+_Date = date 
+
 
 class MaintenanceIn(BaseModel):
     serial: str = Field(min_length=1)
     dc: str | None = None
     type: str = Field(min_length=1)
     date: date
+
+
+VOID_REASONS = ["Entered by mistake", "Wrong drive", "Wrong date or type", "Duplicate of another record", "Other"]
+
+
+class MaintenanceVoidIn(BaseModel):
+    reason: str = Field(min_length=1)
+    note: str | None = Field(default=None, max_length=150)
+
+
+class MaintenanceEditIn(BaseModel):
+    type: str | None = Field(default=None, min_length=1)
+    date: _Date | None = None
 
 
 class ReplacementIn(BaseModel):

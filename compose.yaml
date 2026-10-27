@@ -11,3 +11,70 @@ services:
     ports:
       - "8002:8000"
     restart: unless-stopped
+
+  # ---- streaming: collectors -> Kafka -> consumer -> /api/ingest/readings ----
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: uyamaa-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://:9092,EXTERNAL://:9094,CONTROLLER://:9093
+      # PLAINTEXT = inside Docker; EXTERNAL = collectors outside (set KAFKA_EXTERNAL_HOST to the server's address)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://${KAFKA_EXTERNAL_HOST:-localhost}:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+    ports:
+      # The external listener has NO login or encryption. Keep it on localhost until you add
+      # SASL/TLS or a VPN; set KAFKA_BIND=0.0.0.0 only on a network you trust.
+      - "${KAFKA_BIND:-127.0.0.1}:9094:9094"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  kafka-init:
+    image: apache/kafka:3.9.0
+    container_name: uyamaa-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic smart.readings --partitions 3 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic smart.readings.dlq --partitions 1 --replication-factor 1 --config retention.ms=2592000000
+    restart: "no"
+
+  ingest-consumer:
+    image: ghcr.io/uyamaa/ingest-consumer:latest
+    build:
+      context: ./streaming
+    container_name: uyamaa-ingest-consumer
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      api-branden:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      API_URL: http://api-branden:8000
+      INGEST_API_KEY: ${INGEST_API_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  kafka_data:
